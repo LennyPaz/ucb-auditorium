@@ -163,8 +163,8 @@ textarea{width:100%;min-height:150px;font:inherit;font-size:12.5px;line-height:1
         <div class="rangewrap"><input type="range" id="W" min="24" max="50" step="0.5" aria-label="Front wall width in feet"><output id="WOut"></output></div></div>
       <div class="row"><span class="lbl">Front wall to back</span>
         <div class="rangewrap"><input type="range" id="D" min="30" max="60" step="0.5" aria-label="Room depth in feet"><output id="DOut"></output></div></div>
-      <div class="row"><span class="lbl">Dropped center height</span>
-        <div class="rangewrap"><input type="range" id="H" min="10" max="22" step="0.5" aria-label="Height of the dropped center ceiling in feet"><output id="HOut"></output></div></div>
+      <div class="row"><span class="lbl">Drop height at front</span>
+        <div class="rangewrap"><input type="range" id="H" min="10" max="22" step="0.5" aria-label="Height of the dropped ceiling at its front edge, in feet"><output id="HOut"></output></div></div>
       <div class="row"><span class="lbl">Upper ceiling</span>
         <div class="rangewrap"><input type="range" id="Hp" min="12" max="24" step="0.5" aria-label="Height of the upper ceiling above the gap, in feet"><output id="HpOut"></output></div></div>
       <div class="row"><span class="lbl">Ceiling drop starts</span>
@@ -460,6 +460,8 @@ function build(){
   // ceiling: higher outer band with downlights, dropped center cloud, dark reveal gap between
   const BAND = 3.5, GAP = 0.6, FASCIA = 1.0;
   const cloudHalf = z => Math.max(2, halfW(Math.min(z, zEnd)) - BAND);
+  // the dropped ceiling slopes up toward the back until it meets the upper ceiling (from the site photos)
+  const cloudY = z => H + (Hm - H) * Math.min(1, Math.max(0, (z - SL) / Math.max(1, D - SL)));
   { const perim = new THREE.ShapeGeometry(flatShape([[-W/2,0],[W/2,0]].concat(backArc), 1)); perim.rotateX(Math.PI/2);
     room.add(mesh(perim, M.perim, 0, Hm, 0, {receive:false}));
     const cz0 = SL + GAP/2, rC = RBW - 1.5;
@@ -470,7 +472,8 @@ function build(){
     const right = []; for (let z = cz0; z < zArc; z += 2) right.push([cloudHalf(z), z]);
     right.reverse().forEach(p => cpts.push(p));
     const cg = new THREE.ShapeGeometry(flatShape(cpts, 1)); cg.rotateX(Math.PI/2);
-    room.add(mesh(cg, M.tile, 0, H, 0, {receive:false}));
+    { const pa = cg.attributes.position; for (let i=0; i<pa.count; i++) pa.setY(i, cloudY(pa.getZ(i))); pa.needsUpdate = true; cg.computeVertexNormals(); }
+    room.add(mesh(cg, M.tile, 0, 0, 0, {receive:false}));
     let mx0 = 0, mz0 = 0; cpts.forEach(p => { mx0 += p[0]; mz0 += p[1]; }); mx0 /= cpts.length; mz0 /= cpts.length;
     for (let i=0; i<cpts.length; i++){
       const p0 = cpts[i], p1 = cpts[(i+1) % cpts.length];
@@ -478,8 +481,10 @@ function build(){
       if (len < 0.01) continue;
       let nx = dz/len, nz = -dx/len; const mx = (p0[0]+p1[0])/2, mz = (p0[1]+p1[1])/2;
       if (nx*(mx-mx0) + nz*(mz-mz0) < 0){ nx = -nx; nz = -nz; }
-      const f = mesh(new THREE.PlaneGeometry(len + 0.02, FASCIA), M.fascia, mx, H + FASCIA/2, mz, {receive:false}); f.rotation.y = Math.atan2(nx, nz); ceilDetail.add(f);
-      const gp = box(len + 0.05, 0.03, GAP, M.reveal, mx + nx*GAP/2, H + 0.04, mz + nz*GAP/2, {receive:false}); gp.rotation.y = Math.atan2(-dz, dx); ceilDetail.add(gp);
+      const cy = cloudY(mz), fh = Hm - cy;          // the step shrinks toward the back and disappears
+      if (fh < 0.08) continue;
+      const f = mesh(new THREE.PlaneGeometry(len + 0.02, fh), M.fascia, mx, cy + fh/2, mz, {receive:false}); f.rotation.y = Math.atan2(nx, nz); ceilDetail.add(f);
+      const gp = box(len + 0.05, 0.03, GAP, M.reveal, mx + nx*GAP/2, cy + 0.04, mz + nz*GAP/2, {receive:false}); gp.rotation.y = Math.atan2(-dz, dx); ceilDetail.add(gp);
     }
     const dl = (x, z) => { const c = mesh(new THREE.CircleGeometry(0.33, 20), M.downlight, x, Hm - 0.02, z, {receive:false}); c.rotation.x = Math.PI/2; room.add(c); };
     for (let z = SL + 3; z < zEnd - 1; z += 4.5) [-1,1].forEach(sg => dl(sg*(halfW(z) - BAND/2 - 0.2), z));
@@ -596,16 +601,19 @@ function build(){
     const d2 = mesh(new THREE.CircleGeometry(1.25, 48), M.sealIn, 0, bandY, D-0.14); d2.rotation.y = Math.PI; room.add(d2);
   }
 
-  // pendant fixtures with area lights so they actually light the seating
+  // pendant fixtures, from the site photos: parallel rows running front to back (parallel to the side
+  // walls), two long bronze two-lens pendants per row with a gap between them, hung level from the sloped drop
   if (state.lights){
-    for (let z = SL + 4.5; z < D - 4; z += 6.5){
-      const hw = halfW(Math.min(z, zEnd));
-      for (const x of [-hw*0.42, hw*0.08, hw*0.5]){
-        const l = box(8, 0.28, 0.85, M.fixture, x, H-1.4, z, {receive:false}); l.rotation.y = 0.22; room.add(l);
-        const e = box(7.5, 0.04, 0.55, M.lens, x, H-1.56, z, {receive:false}); e.rotation.y = 0.22; room.add(e);
-        [-3.5, 3.5].forEach(o => { const c = mesh(new THREE.CylinderGeometry(0.02, 0.02, 1.3, 4), M.steel, x + o*Math.cos(0.22), H-0.65, z - o*Math.sin(0.22), {receive:false}); room.add(c); });
-      }
-    }
+    const FL = 9, rowsX = [-14.5, -8.7, -2.9, 2.9, 8.7, 14.5], spans = [[SL + 3, SL + 3 + FL], [SL + 6.5 + FL, SL + 6.5 + 2*FL]];
+    rowsX.forEach(x => spans.forEach(([z0, z1]) => {
+      const zc = (z0 + z1) / 2, y = cloudY(zc) - 1.6;
+      room.add(box(0.75, 0.25, FL, M.fixture, x, y, zc, {receive:false}));
+      [-1, 1].forEach(sg => room.add(box(0.45, 0.03, FL/2 - 0.35, M.lens, x, y - 0.13, zc + sg*(FL/4 + 0.05), {receive:false})));
+      [z0 + 0.6, z1 - 0.6].forEach(zz => {
+        const top = cloudY(zz), len = top - (y + 0.125);
+        room.add(mesh(new THREE.CylinderGeometry(0.015, 0.015, len, 4), M.steel, x, y + 0.125 + len/2, zz, {receive:false}));
+      });
+    }));
   }
   // soft fill from the downlight band along each side
 
@@ -635,7 +643,7 @@ function build(){
 
   // flown speakers: one hang per side, main on top joined to its sub below, on pipes to the ceiling above
   const flown = [], spkZ = +state.spkZ, spread = +state.spread, hang = +state.hang;
-  const ceilAt = (x, z) => (z >= SL + 0.3 && Math.abs(x) < cloudHalf(z)) ? H : Hm;
+  const ceilAt = (x, z) => (z >= SL + 0.3 && Math.abs(x) < cloudHalf(z)) ? cloudY(z) : Hm;
   const MAIN = {w:1.35, h:2.2, d:1.25}, SUB = {w:1.6, h:1.75, d:2.0}, JOIN = 0.12;
   function hangAt(x, withSub, label){
     const g = new THREE.Group(), toe = Math.atan2(-x, (S + 12) - spkZ);
