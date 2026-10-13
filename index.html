@@ -822,7 +822,16 @@ function curTarget(){
   if (mode === "orbit") return ctl.target.clone();
   const dir = new THREE.Vector3(); camera.getWorldDirection(dir); return camera.position.clone().addScaledVector(dir, 12);
 }
-function setFov(f){ camera.fov = Math.max(22, Math.min(75, f)); camera.updateProjectionMatrix(); dirty = true; }
+// userFov is the zoom level as it would look on a landscape screen. On a tall, narrow (portrait)
+// screen the vertical angle is widened so a seat view still shows the full width of the front wall.
+let userFov = BASE_FOV;
+function applyFov(){
+  const a = camera.aspect || 1;
+  let f = userFov;
+  if (a < 1){ f = 2 * Math.atan(Math.tan(userFov * Math.PI / 360) * 1.3 / a) * 180 / Math.PI; f = Math.min(f, 105); }
+  camera.fov = f; camera.updateProjectionMatrix(); dirty = true;
+}
+function setFov(f){ userFov = Math.max(22, Math.min(75, f)); applyFov(); }
 function setHint(){
   $("hint").textContent = mode === "look" ? "Drag to look around. Scroll or pinch to zoom. Click any person to sit in their seat." : "Drag to orbit. Scroll or pinch to zoom. Click any person to see their view.";
   canvas.setAttribute("aria-label", mode === "look" ? "3D model, seated view. Drag or use arrow keys to look around." : "3D model of the auditorium. Drag or use arrow keys to orbit, scroll or pinch to zoom.");
@@ -909,7 +918,7 @@ function turn(dx, dy){
     ctl.th -= dx*k; ctl.ph = Math.max(0.03, Math.min(1.68, ctl.ph - dy*k)); applyCam();
   }
 }
-function zoom(f){ if (mode === "look") setFov(camera.fov * f); else { ctl.r = Math.max(0.5, Math.min(160, ctl.r * f)); applyCam(); } }
+function zoom(f){ if (mode === "look") setFov(userFov * f); else { ctl.r = Math.max(0.5, Math.min(160, ctl.r * f)); applyCam(); } }
 canvas.addEventListener("contextmenu", e => e.preventDefault());
 const ray = new THREE.Raycaster(), ndc = new THREE.Vector2();
 function seatUnder(cx, cy){
@@ -1018,7 +1027,7 @@ $("reset").addEventListener("click", () => { fields.forEach(k => state[k] = DEFA
 function resize(){
   const w = stage.clientWidth, h = stage.clientHeight;
   if (!w || !h) return;
-  renderer.setSize(w, h, false); camera.aspect = w/h; camera.updateProjectionMatrix();
+  renderer.setSize(w, h, false); camera.aspect = w/h; applyFov();
   if (composer){ const pr = renderer.getPixelRatio(); composer.setPixelRatio(pr); composer.setSize(w, h);
     fxaa.material.uniforms.resolution.value.set(1/(w*pr), 1/(h*pr)); }
   dirty = true;
