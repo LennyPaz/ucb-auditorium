@@ -195,8 +195,8 @@ THREE.ColorManagement.legacyMode = false; // treat hex colors as sRGB so materia
 const coarse = window.matchMedia("(pointer: coarse)").matches;
 const DEFAULTS = {size:"dv135", gap:3, bottom:5, spread:13.25, hang:8.25, spkZ:1.5, slot:2, subs:"2", center:false,
   console:"front-right", conSide:7, conFront:3, conW:44, conD:30, W:42, D:33.5, H:13, Hp:16, rows:7,
-  labels:false, lights:true, people:false, ao:false, panel:true};
-const KEY = "ucb-av-model-v12";
+  labels:false, lights:true, people:false, ao:false, panel:false};
+const KEY = "ucb-av-model-v13";
 let state = Object.assign({}, DEFAULTS);
 try { const s = JSON.parse(localStorage.getItem(KEY) || "null"); if (s) state = Object.assign(state, s); } catch(e) {}
 state.size = "dv135"; state.labels = false; state.people = true; state.ao = false;
@@ -1053,7 +1053,7 @@ window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", set
 
 syncForm(); setSceneBg(); build(); resize();
 setFrom(new THREE.Vector3(-26, 30, G.D+26), new THREE.Vector3(0, 5, G.D*0.35));
-setHint(); setPanel(state.panel !== false);
+setHint(); setPanel(state.panel === true);
 requestAnimationFrame(loop);
 })();
 </script>
